@@ -179,8 +179,15 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
     for _ in range(4):
         assignment = [-1] * n
         used = set()
+        row_regrets: list[tuple[int, float]] = []
         for i in range(n):
-            choices = sorted(range(n), key=lambda j: cost[i][j] + prices[j])
+            reduced = sorted(cost[i][j] - prices[j] for j in range(n))
+            gap = (reduced[1] - reduced[0]) if n > 1 else reduced[0]
+            row_regrets.append((i, gap))
+        row_order = [i for i, _ in sorted(row_regrets, key=lambda x: x[1], reverse=True)]
+
+        for i in row_order:
+            choices = sorted(range(n), key=lambda j: cost[i][j] - prices[j])
             for j in choices:
                 if j not in used:
                     assignment[i] = j
@@ -192,8 +199,9 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
         for j in range(n):
             i = inv[j]
             if i >= 0:
-                prices[j] = 0.85 * prices[j] + 0.15 * cost[i][j]
-    assignment = mur_local_improve(cost, assignment, rounds=7, stop_early=False)
+                row_min = min(cost[i])
+                prices[j] = 0.85 * prices[j] + 0.15 * (cost[i][j] - row_min)
+    assignment = mur_local_improve(cost, assignment, rounds=14, stop_early=True)
     return assignment
 
 
@@ -205,14 +213,19 @@ def solve_murid(cost: list[list[float]]) -> list[int]:
         for j, val in enumerate(row):
             col_sums[j] += val
     col_bias = [s / n for s in col_sums]
-    order = sorted(range(n), key=lambda i: min(cost[i][j] - 0.2 * col_bias[j] for j in range(n)))
+    row_regrets: list[tuple[int, float]] = []
+    for i in range(n):
+        reduced = sorted(cost[i][j] - 0.2 * col_bias[j] for j in range(n))
+        gap = (reduced[1] - reduced[0]) if n > 1 else reduced[0]
+        row_regrets.append((i, gap))
+    order = [i for i, _ in sorted(row_regrets, key=lambda x: x[1], reverse=True)]
     remaining = set(range(n))
     assign = [-1] * n
     for i in order:
         j_best = min(remaining, key=lambda j: cost[i][j] - 0.2 * col_bias[j])
         assign[i] = j_best
         remaining.remove(j_best)
-    assign = mur_local_improve(cost, assign, rounds=1, stop_early=True)
+    assign = mur_local_improve(cost, assign, rounds=6, stop_early=True)
     return assign
 
 
@@ -325,7 +338,7 @@ def run_simulation(
 
 
 def benchmark_solvers(
-    cost_matrices: list[list[list[float]]],
+    cost_matrices_sets: list[list[list[list[float]]]],
     cfg: Config,
 ) -> tuple[dict[str, float], dict[str, float]]:
     solvers: dict[str, Callable[[list[list[float]]], list[int]]] = {
@@ -335,8 +348,12 @@ def benchmark_solvers(
         "MURID": solve_murid,
     }
 
-    sample_count = min(cfg.benchmark_samples, len(cost_matrices))
-    sampled = evenly_sample_matrices(cost_matrices, sample_count)
+    sampled: list[list[list[float]]] = []
+    for mats in cost_matrices_sets:
+        if not mats:
+            continue
+        sample_count = min(cfg.benchmark_samples, len(mats))
+        sampled.extend(evenly_sample_matrices(mats, sample_count))
 
     runtime = {}
     avg_cost = {}
@@ -468,7 +485,7 @@ def main() -> None:
     mur_hungarian_obj = compute_hungarian_objective(mur_cost_mats)
     murd_hungarian_obj = compute_hungarian_objective(murd_cost_mats)
 
-    runtime, avg_cost = benchmark_solvers(cost_mats, cfg)
+    runtime, avg_cost = benchmark_solvers([cost_mats, mur_cost_mats, murd_cost_mats], cfg)
 
     fig6_path = out_dir / "fig6_reproduced.png"
     fig7_path = out_dir / "fig7_reproduced.png"
@@ -501,7 +518,7 @@ def main() -> None:
             "\nRuntime ordering Hungarian > MUR > MURD > MURID "
             f"(empirical, tolerance={cfg.runtime_order_tolerance:.3f}): {order_ok}\n\n"
         )
-        f.write("Average objective on sampled Problem C matrices:\n")
+        f.write("Average objective on sampled matrices from MURID, MUR, and MURD trajectories:\n")
         for k in ["Hungarian", "MUR", "MURD", "MURID"]:
             f.write(f"  {k:10s}: {avg_cost[k]:.4f}\n")
         f.write("\nBattery statistics from Figure 7-style simulation:\n")
