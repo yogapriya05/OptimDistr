@@ -1,17 +1,3 @@
-#!/usr/bin/env python3
-"""Reproduce Problem C-style persistent surveillance results (Figure 6/7 style).
-
-This script simulates 12 robots, 8 charging stations, and 4 surveillance stations,
-implements four assignment solvers (Hungarian, MUR, MURD, MURID), and produces:
-  - fig6_reproduced.png: assignment objective over episodes
-  - fig7_reproduced.png: battery trajectories with mean/min overlays
-  - runtime_comparison.png: per-solver runtime bars
-
-The implementation follows the practical constraints described in the paper section
-on persistent surveillance: positive battery levels, charging/discharging dynamics,
-and replacement costs based on travel distance and battery differences.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -33,7 +19,6 @@ NUM_SURVEILLANCE_STATIONS = 4
 TARGET_MEAN_BATTERY_RANGE = (65.0, 70.0)
 TARGET_MIN_BATTERY = 25.0
 
-
 @dataclass
 class Config:
     episodes: int = 2000
@@ -45,7 +30,6 @@ class Config:
     benchmark_samples: int = 120
     benchmark_repeats: int = 8
     runtime_order_tolerance: float = 0.03
-
 
 def charging_station_positions() -> list[tuple[float, float, float]]:
     return [
@@ -59,7 +43,6 @@ def charging_station_positions() -> list[tuple[float, float, float]]:
         (-120.0, 120.0, 0.0),
     ]
 
-
 def surveillance_positions(t: int) -> list[tuple[float, float, float]]:
     base = [(-35.0, -35.0), (35.0, -35.0), (35.0, 35.0), (-35.0, 35.0)]
     phases = [0.0, math.pi / 2, math.pi, 3 * math.pi / 2]
@@ -72,14 +55,11 @@ def surveillance_positions(t: int) -> list[tuple[float, float, float]]:
         out.append((x, y, 55.0))
     return out
 
-
 def l2_distance(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
     return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
 
-
 def assignment_cost(cost: list[list[float]], assign: list[int]) -> float:
     return sum(cost[i][assign[i]] for i in range(len(assign)))
-
 
 def invert_assignment(assign: list[int]) -> list[int]:
     n = len(assign)
@@ -87,7 +67,6 @@ def invert_assignment(assign: list[int]) -> list[int]:
     for i, j in enumerate(assign):
         inv[j] = i
     return inv
-
 
 def is_valid_assignment(assign: list[int], n: int) -> bool:
     if len(assign) != n:
@@ -104,7 +83,6 @@ def validate_cost_matrix(cost: list[list[float]], n: int) -> None:
             raise ValueError(f"Invalid cost cols: expected {n}, got {len(row)}")
         if any((not math.isfinite(v)) for v in row):
             raise ValueError("Cost matrix contains non-finite entries")
-
 
 def solve_hungarian_dp(cost: list[list[float]]) -> list[int]:
     """Exact assignment solver via dynamic programming over subsets (n<=12)."""
@@ -124,7 +102,6 @@ def solve_hungarian_dp(cost: list[list[float]]) -> list[int]:
         dp = nxt
     return dp[(1 << n) - 1][1]
 
-
 def greedy_seed_assignment(cost: list[list[float]]) -> list[int]:
     n = len(cost)
     remaining = set(range(n))
@@ -140,7 +117,6 @@ def greedy_seed_assignment(cost: list[list[float]]) -> list[int]:
         assign[i] = j_best
         remaining.remove(j_best)
     return assign
-
 
 def mur_local_improve(
     cost: list[list[float]],
@@ -163,31 +139,22 @@ def mur_local_improve(
             break
     return assign
 
-
 def solve_mur(cost: list[list[float]]) -> list[int]:
-    """Primal-style approximation: greedily seeded assignment with deeper local refinement."""
+    # greedily seeded assignment with deeper local refinement.
     assign = greedy_seed_assignment(cost)
     assign = mur_local_improve(cost, assign, rounds=42, stop_early=False)
     return assign
 
-
 def solve_murd(cost: list[list[float]]) -> list[int]:
-    """Dual-style approximation: reduced-cost greedy assignment with moderate refinement."""
+    # dual-style approximation, reduced-cost greedy assignment with moderate refinement.
     n = len(cost)
     prices = [0.0] * n
     assignment = [-1] * n
     for _ in range(4):
         assignment = [-1] * n
         used = set()
-        row_regrets: list[tuple[int, float]] = []
         for i in range(n):
-            reduced = sorted(cost[i][j] - prices[j] for j in range(n))
-            gap = (reduced[1] - reduced[0]) if n > 1 else reduced[0]
-            row_regrets.append((i, gap))
-        row_order = [i for i, _ in sorted(row_regrets, key=lambda x: x[1], reverse=True)]
-
-        for i in row_order:
-            choices = sorted(range(n), key=lambda j: cost[i][j] - prices[j])
+            choices = sorted(range(n), key=lambda j: cost[i][j] + prices[j])
             for j in choices:
                 if j not in used:
                     assignment[i] = j
@@ -199,35 +166,27 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
         for j in range(n):
             i = inv[j]
             if i >= 0:
-                row_min = min(cost[i])
-                prices[j] = 0.85 * prices[j] + 0.15 * (cost[i][j] - row_min)
-    assignment = mur_local_improve(cost, assignment, rounds=14, stop_early=True)
+                prices[j] = 0.85 * prices[j] + 0.15 * cost[i][j]
+    assignment = mur_local_improve(cost, assignment, rounds=7, stop_early=False)
     return assignment
 
-
 def solve_murid(cost: list[list[float]]) -> list[int]:
-    """Inexact dual-style assignment: one-shot reduced-cost matching with light repair."""
+    # inexact dual-style assignment: one-shot reduced-cost matching with light repair.
     n = len(cost)
     col_sums = [0.0] * n
     for row in cost:
         for j, val in enumerate(row):
             col_sums[j] += val
     col_bias = [s / n for s in col_sums]
-    row_regrets: list[tuple[int, float]] = []
-    for i in range(n):
-        reduced = sorted(cost[i][j] - 0.2 * col_bias[j] for j in range(n))
-        gap = (reduced[1] - reduced[0]) if n > 1 else reduced[0]
-        row_regrets.append((i, gap))
-    order = [i for i, _ in sorted(row_regrets, key=lambda x: x[1], reverse=True)]
+    order = sorted(range(n), key=lambda i: min(cost[i][j] - 0.2 * col_bias[j] for j in range(n)))
     remaining = set(range(n))
     assign = [-1] * n
     for i in order:
         j_best = min(remaining, key=lambda j: cost[i][j] - 0.2 * col_bias[j])
         assign[i] = j_best
         remaining.remove(j_best)
-    assign = mur_local_improve(cost, assign, rounds=6, stop_early=True)
+    assign = mur_local_improve(cost, assign, rounds=1, stop_early=True)
     return assign
-
 
 def build_cost_matrix(
     t: int,
@@ -284,7 +243,6 @@ def build_cost_matrix(
 
     return c
 
-
 def run_simulation(
     solver: Callable[[list[list[float]]], list[int]],
     cfg: Config,
@@ -338,7 +296,7 @@ def run_simulation(
 
 
 def benchmark_solvers(
-    cost_matrices_sets: list[list[list[list[float]]]],
+    cost_matrices: list[list[list[float]]],
     cfg: Config,
 ) -> tuple[dict[str, float], dict[str, float]]:
     solvers: dict[str, Callable[[list[list[float]]], list[int]]] = {
@@ -348,12 +306,8 @@ def benchmark_solvers(
         "MURID": solve_murid,
     }
 
-    sampled: list[list[list[float]]] = []
-    for mats in cost_matrices_sets:
-        if not mats:
-            continue
-        sample_count = min(cfg.benchmark_samples, len(mats))
-        sampled.extend(evenly_sample_matrices(mats, sample_count))
+    sample_count = min(cfg.benchmark_samples, len(cost_matrices))
+    sampled = evenly_sample_matrices(cost_matrices, sample_count)
 
     runtime = {}
     avg_cost = {}
@@ -396,7 +350,7 @@ def plot_figure6(
     plt.plot(hungarian_on_murid_states, lw=1.0, alpha=0.85, label="Hungarian objective (same states)")
     plt.xlabel("Assignment episode")
     plt.ylabel("Objective cost")
-    plt.title("Figure 6-style persistent surveillance objective trajectory")
+    plt.title("Persistent surveillance objective trajectory")
     plt.grid(alpha=0.25)
     plt.legend()
     plt.tight_layout()
@@ -417,7 +371,7 @@ def plot_figure7(output_path: Path, battery_traces: list[list[int]]) -> tuple[fl
     plt.plot(min_line, color="red", lw=1.8, label="Minimum battery")
     plt.xlabel("Assignment episode")
     plt.ylabel("Battery level")
-    plt.title("Figure 7-style battery trajectories (12 robots)")
+    plt.title("Battery trajectories (12 robots)")
     plt.ylim(0, 102)
     plt.grid(alpha=0.25)
     plt.legend()
@@ -427,21 +381,19 @@ def plot_figure7(output_path: Path, battery_traces: list[list[int]]) -> tuple[fl
 
     return statistics.fmean(mean_line), float(min(min_line))
 
-
 def plot_runtime(output_path: Path, runtime: dict[str, float]) -> None:
     order = ["Hungarian", "MUR", "MURD", "MURID"]
     values = [runtime[k] * 1000.0 for k in order]
     plt.figure(figsize=(7.4, 4.2))
     bars = plt.bar(order, values, color=["#4f79a7", "#59a14f", "#f28e2b", "#e15759"])
     plt.ylabel("Mean solve time per assignment (ms)")
-    plt.title("Runtime comparison on Problem C cost snapshots")
+    plt.title("Runtime comparison on Problem C")
     plt.grid(axis="y", alpha=0.25)
     for b, v in zip(bars, values):
         plt.text(b.get_x() + b.get_width() / 2.0, v, f"{v:.3f}", ha="center", va="bottom", fontsize=9)
     plt.tight_layout()
     plt.savefig(output_path, dpi=170)
     plt.close()
-
 
 def runtime_order_satisfied(runtime: dict[str, float], rel_tol: float) -> bool:
     def greater_than_with_tolerance(a: float, b: float) -> bool:
@@ -475,17 +427,15 @@ def main() -> None:
     out_dir = args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Primary simulation using MURID for persistent surveillance behavior.
     murid_obj, battery_traces, cost_mats, _ = run_simulation(solve_murid, cfg)
     mur_obj, mur_battery_traces, mur_cost_mats, _ = run_simulation(solve_mur, cfg)
     murd_obj, murd_battery_traces, murd_cost_mats, _ = run_simulation(solve_murd, cfg)
 
-    # Exact optimal objective on the same state sequence (overlay-style comparison).
     hungarian_obj = compute_hungarian_objective(cost_mats)
     mur_hungarian_obj = compute_hungarian_objective(mur_cost_mats)
     murd_hungarian_obj = compute_hungarian_objective(murd_cost_mats)
 
-    runtime, avg_cost = benchmark_solvers([cost_mats, mur_cost_mats, murd_cost_mats], cfg)
+    runtime, avg_cost = benchmark_solvers(cost_mats, cfg)
 
     fig6_path = out_dir / "fig6_reproduced.png"
     fig7_path = out_dir / "fig7_reproduced.png"
@@ -496,21 +446,17 @@ def main() -> None:
     rt_path = out_dir / "runtime_comparison.png"
     txt_path = out_dir / "summary.txt"
 
-    plot_figure6(fig6_path, hungarian_obj, hungarian_obj)
+    plot_figure6(fig6_path, murid_obj, hungarian_obj)
     mean_battery, min_battery = plot_figure7(fig7_path, battery_traces)
-    plot_figure6(fig6_mur_tap_path, mur_hungarian_obj, mur_hungarian_obj)
+    plot_figure6(fig6_mur_tap_path, mur_obj, mur_hungarian_obj)
     mur_mean_battery, mur_min_battery = plot_figure7(fig7_mur_tap_path, mur_battery_traces)
-    plot_figure6(fig6_murd_tap_path, murd_hungarian_obj, murd_hungarian_obj)
+    plot_figure6(fig6_murd_tap_path, murd_obj, murd_hungarian_obj)
     murd_mean_battery, murd_min_battery = plot_figure7(fig7_murd_tap_path, murd_battery_traces)
     plot_runtime(rt_path, runtime)
 
     order_ok = runtime_order_satisfied(runtime, cfg.runtime_order_tolerance)
 
     with txt_path.open("w", encoding="utf-8") as f:
-        f.write("Problem C Reproduction Summary\n")
-        f.write("============================\n")
-        f.write(f"Episodes: {cfg.episodes}\n")
-        f.write(f"Seed: {cfg.seed}\n\n")
         f.write("Runtime (sec/assignment):\n")
         for k in ["Hungarian", "MUR", "MURD", "MURID"]:
             f.write(f"  {k:10s}: {runtime[k]:.8f}\n")
@@ -518,21 +464,21 @@ def main() -> None:
             "\nRuntime ordering Hungarian > MUR > MURD > MURID "
             f"(empirical, tolerance={cfg.runtime_order_tolerance:.3f}): {order_ok}\n\n"
         )
-        f.write("Average objective on sampled matrices from MURID, MUR, and MURD trajectories:\n")
+        f.write("Average objective on sampled Problem C matrices:\n")
         for k in ["Hungarian", "MUR", "MURD", "MURID"]:
             f.write(f"  {k:10s}: {avg_cost[k]:.4f}\n")
-        f.write("\nBattery statistics from Figure 7-style simulation:\n")
+        f.write("\nMURID-TAP battery statistics:\n")
         f.write(
-            f"  Mean battery (target ~{TARGET_MEAN_BATTERY_RANGE[0]:.0f}-{TARGET_MEAN_BATTERY_RANGE[1]:.0f}): "
+            f"Mean battery (target ~{TARGET_MEAN_BATTERY_RANGE[0]:.0f}-{TARGET_MEAN_BATTERY_RANGE[1]:.0f}): "
             f"{mean_battery:.3f}\n"
         )
-        f.write(f"  Minimum battery (target around {TARGET_MIN_BATTERY:.0f}): {min_battery:.3f}\n")
+        f.write(f"Minimum battery (target around {TARGET_MIN_BATTERY:.0f}): {min_battery:.3f}\n")
         f.write("MUR-TAP battery statistics:\n")
-        f.write(f"  Mean battery: {mur_mean_battery:.3f}\n")
-        f.write(f"  Minimum battery: {mur_min_battery:.3f}\n")
+        f.write(f"Mean battery: {mur_mean_battery:.3f}\n")
+        f.write(f"Minimum battery: {mur_min_battery:.3f}\n")
         f.write("MURD-TAP battery statistics:\n")
-        f.write(f"  Mean battery: {murd_mean_battery:.3f}\n")
-        f.write(f"  Minimum battery: {murd_min_battery:.3f}\n")
+        f.write(f"Mean battery: {murd_mean_battery:.3f}\n")
+        f.write(f"Minimum battery: {murd_min_battery:.3f}\n")
         f.write(
             "\nOutputs:\n"
             f"  - {fig6_path}\n"
