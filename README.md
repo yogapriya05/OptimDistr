@@ -33,6 +33,10 @@ Outputs are created in:
 
 - `outputs/fig6_reproduced.png`
 - `outputs/fig7_reproduced.png`
+- `outputs/fig6_mur_tap.png`
+- `outputs/fig7_mur_tap.png`
+- `outputs/fig6_murd_tap.png`
+- `outputs/fig7_murd_tap.png`
 - `outputs/runtime_comparison.png`
 - `outputs/summary.txt`
 
