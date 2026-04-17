@@ -427,11 +427,11 @@ def plot_runtime(output_path: Path, runtime: dict[str, float]) -> None:
 
 
 def runtime_order_satisfied(runtime: dict[str, float], rel_tol: float) -> bool:
-    def gt(a: float, b: float) -> bool:
+    def greater_than_with_tolerance(a: float, b: float) -> bool:
         return a > b * (1.0 + rel_tol)
 
     expected = ["Hungarian", "MUR", "MURD", "MURID"]
-    return all(gt(runtime[a], runtime[b]) for a, b in zip(expected, expected[1:]))
+    return all(greater_than_with_tolerance(runtime[a], runtime[b]) for a, b in zip(expected, expected[1:]))
 
 
 def main() -> None:
