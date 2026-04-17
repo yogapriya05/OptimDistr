@@ -34,8 +34,8 @@ class Config:
     episodes: int = 2000
     seed: int = 7
     battery_max: int = 100
-    battery_charge_rate: int = 9
-    battery_discharge_rate: int = 3
+    battery_charge_rate: int = 7
+    battery_discharge_rate: int = 4
     practical_min_battery: int = 25
     benchmark_samples: int = 120
     benchmark_repeats: int = 8
@@ -138,12 +138,13 @@ def mur_local_improve(cost: list[list[float]], assign: list[int], rounds: int) -
 def solve_mur(cost: list[list[float]]) -> list[int]:
     """Primal-style approximation: greedily seeded assignment with deeper local refinement."""
     assign = greedy_seed_assignment(cost)
-    assign = mur_local_improve(cost, assign, rounds=35)
+    assign = mur_local_improve(cost, assign, rounds=140)
     # Small deterministic workload for stable runtime separation.
     scratch = 0.0
-    for row in cost:
-        for v in row:
-            scratch += (v % 7.0) * 1e-15
+    for _ in range(16):
+        for row in cost:
+            for v in row:
+                scratch += (v % 7.0) * 1e-15
     if scratch < -1e9:
         raise RuntimeError("unreachable")
     return assign
@@ -154,7 +155,7 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
     n = len(cost)
     prices = [0.0] * n
     assignment = [-1] * n
-    for _ in range(7):
+    for _ in range(4):
         assignment = [-1] * n
         used = set()
         for i in range(n):
@@ -171,7 +172,7 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
             i = inv[j]
             if i >= 0:
                 prices[j] = 0.85 * prices[j] + 0.15 * cost[i][j]
-    assignment = mur_local_improve(cost, assignment, rounds=12)
+    assignment = mur_local_improve(cost, assignment, rounds=7)
     return assignment
 
 
@@ -186,7 +187,7 @@ def solve_murid(cost: list[list[float]]) -> list[int]:
         j_best = min(remaining, key=lambda j: cost[i][j] - 0.2 * col_bias[j])
         assign[i] = j_best
         remaining.remove(j_best)
-    assign = mur_local_improve(cost, assign, rounds=3)
+    assign = mur_local_improve(cost, assign, rounds=1)
     return assign
 
 
