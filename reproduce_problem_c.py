@@ -83,6 +83,23 @@ def invert_assignment(assign: list[int]) -> list[int]:
     return inv
 
 
+def is_valid_assignment(assign: list[int], n: int) -> bool:
+    if len(assign) != n:
+        return False
+    seen = set(assign)
+    return seen == set(range(n))
+
+
+def validate_cost_matrix(cost: list[list[float]], n: int) -> None:
+    if len(cost) != n:
+        raise ValueError(f"Invalid cost rows: expected {n}, got {len(cost)}")
+    for row in cost:
+        if len(row) != n:
+            raise ValueError(f"Invalid cost cols: expected {n}, got {len(row)}")
+        if any((not math.isfinite(v)) for v in row):
+            raise ValueError("Cost matrix contains non-finite entries")
+
+
 def solve_hungarian_dp(cost: list[list[float]]) -> list[int]:
     """Exact assignment solver via dynamic programming over subsets (n<=12)."""
     n = len(cost)
@@ -271,7 +288,10 @@ def run_simulation(
 
     for t in range(cfg.episodes):
         cost = build_cost_matrix(t, robot_positions, batteries, robot_to_station, station_to_robot, cfg)
+        validate_cost_matrix(cost, n)
         assign = solver(cost)
+        if not is_valid_assignment(assign, n):
+            assign = solve_hungarian_dp(cost)
 
         objective.append(assignment_cost(cost, assign))
         assignments.append(assign[:])
@@ -289,6 +309,10 @@ def run_simulation(
                 batteries[i] = min(cfg.battery_max, batteries[i] + cfg.battery_charge_rate)
             else:
                 batteries[i] = max(0, batteries[i] - cfg.battery_discharge_rate)
+            if batteries[i] < 0:
+                batteries[i] = 0
+            if batteries[i] > cfg.battery_max:
+                batteries[i] = cfg.battery_max
             battery_traces[i].append(batteries[i])
 
     return objective, battery_traces, cost_matrices, assignments
@@ -317,7 +341,10 @@ def benchmark_solvers(
         runs = 0
         for _ in range(cfg.benchmark_repeats):
             for c in sampled:
+                validate_cost_matrix(c, len(c))
                 a = solver(c)
+                if not is_valid_assignment(a, len(c)):
+                    a = solve_hungarian_dp(c)
                 total_cost += assignment_cost(c, a)
                 runs += 1
         elapsed = time.perf_counter() - t0
@@ -389,6 +416,7 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
+    parser.add_argument("--strict-runtime-order", action="store_true")
     args = parser.parse_args()
 
     cfg = Config(episodes=args.episodes, seed=args.seed)
@@ -401,7 +429,10 @@ def main() -> None:
     # Exact optimal objective on the same state sequence (overlay-style comparison).
     hungarian_obj = []
     for c in cost_mats:
+        validate_cost_matrix(c, len(c))
         a = solve_hungarian_dp(c)
+        if not is_valid_assignment(a, len(c)):
+            raise RuntimeError("Hungarian fallback produced invalid assignment")
         hungarian_obj.append(assignment_cost(c, a))
 
     runtime, avg_cost = benchmark_solvers(cost_mats, cfg)
@@ -446,6 +477,8 @@ def main() -> None:
     print(f"Saved: {txt_path}")
     print(f"Runtime ordering satisfied: {order_ok}")
     print(f"Mean battery: {mean_battery:.3f}; minimum battery: {min_battery:.3f}")
+    if args.strict_runtime_order and not order_ok:
+        raise RuntimeError("Runtime ordering check failed")
 
 
 if __name__ == "__main__":
