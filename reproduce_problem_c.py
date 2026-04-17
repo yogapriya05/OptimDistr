@@ -482,9 +482,9 @@ def main() -> None:
     plot_figure6(fig6_path, murid_obj, hungarian_obj)
     mean_battery, min_battery = plot_figure7(fig7_path, battery_traces)
     plot_figure6(fig6_mur_tap_path, mur_obj, mur_hungarian_obj)
-    _, _ = plot_figure7(fig7_mur_tap_path, mur_battery_traces)
+    mur_mean_battery, mur_min_battery = plot_figure7(fig7_mur_tap_path, mur_battery_traces)
     plot_figure6(fig6_murd_tap_path, murd_obj, murd_hungarian_obj)
-    _, _ = plot_figure7(fig7_murd_tap_path, murd_battery_traces)
+    murd_mean_battery, murd_min_battery = plot_figure7(fig7_murd_tap_path, murd_battery_traces)
     plot_runtime(rt_path, runtime)
 
     order_ok = runtime_order_satisfied(runtime, cfg.runtime_order_tolerance)
@@ -510,6 +510,12 @@ def main() -> None:
             f"{mean_battery:.3f}\n"
         )
         f.write(f"  Minimum battery (target around {TARGET_MIN_BATTERY:.0f}): {min_battery:.3f}\n")
+        f.write("MUR-TAP battery statistics:\n")
+        f.write(f"  Mean battery: {mur_mean_battery:.3f}\n")
+        f.write(f"  Minimum battery: {mur_min_battery:.3f}\n")
+        f.write("MURD-TAP battery statistics:\n")
+        f.write(f"  Mean battery: {murd_mean_battery:.3f}\n")
+        f.write(f"  Minimum battery: {murd_min_battery:.3f}\n")
         f.write(
             "\nOutputs:\n"
             f"  - {fig6_path}\n"
