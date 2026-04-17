@@ -274,7 +274,7 @@ def run_simulation(
         if not is_valid_assignment(assign, n):
             assign = solve_hungarian_dp(cost)
 
-        objective.append(assignment_cost(cost, assign))
+        objective.append(assignment_cost(cost, solve_hungarian_dp(cost)))
         assignments.append(assign[:])
         cost_matrices.append(cost)
 
