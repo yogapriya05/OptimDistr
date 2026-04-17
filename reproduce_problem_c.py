@@ -306,10 +306,6 @@ def run_simulation(
                 batteries[i] = min(cfg.battery_max, batteries[i] + cfg.battery_charge_rate)
             else:
                 batteries[i] = max(0, batteries[i] - cfg.battery_discharge_rate)
-            if batteries[i] < 0:
-                batteries[i] = 0
-            if batteries[i] > cfg.battery_max:
-                batteries[i] = cfg.battery_max
             battery_traces[i].append(batteries[i])
 
     return objective, battery_traces, cost_matrices, assignments
