@@ -325,7 +325,7 @@ def run_simulation(
 
 
 def benchmark_solvers(
-    cost_matrices: list[list[list[float]]],
+    cost_matrices_sets: list[list[list[list[float]]]],
     cfg: Config,
 ) -> tuple[dict[str, float], dict[str, float]]:
     solvers: dict[str, Callable[[list[list[float]]], list[int]]] = {
@@ -335,8 +335,12 @@ def benchmark_solvers(
         "MURID": solve_murid,
     }
 
-    sample_count = min(cfg.benchmark_samples, len(cost_matrices))
-    sampled = evenly_sample_matrices(cost_matrices, sample_count)
+    sampled: list[list[list[float]]] = []
+    for mats in cost_matrices_sets:
+        if not mats:
+            continue
+        sample_count = min(cfg.benchmark_samples, len(mats))
+        sampled.extend(evenly_sample_matrices(mats, sample_count))
 
     runtime = {}
     avg_cost = {}
@@ -468,7 +472,7 @@ def main() -> None:
     mur_hungarian_obj = compute_hungarian_objective(mur_cost_mats)
     murd_hungarian_obj = compute_hungarian_objective(murd_cost_mats)
 
-    runtime, avg_cost = benchmark_solvers(cost_mats, cfg)
+    runtime, avg_cost = benchmark_solvers([cost_mats, mur_cost_mats, murd_cost_mats], cfg)
 
     fig6_path = out_dir / "fig6_reproduced.png"
     fig7_path = out_dir / "fig7_reproduced.png"
@@ -501,7 +505,7 @@ def main() -> None:
             "\nRuntime ordering Hungarian > MUR > MURD > MURID "
             f"(empirical, tolerance={cfg.runtime_order_tolerance:.3f}): {order_ok}\n\n"
         )
-        f.write("Average objective on sampled Problem C matrices:\n")
+        f.write("Average objective on sampled matrices from MURID, MUR, and MURD trajectories:\n")
         for k in ["Hungarian", "MUR", "MURD", "MURID"]:
             f.write(f"  {k:10s}: {avg_cost[k]:.4f}\n")
         f.write("\nBattery statistics from Figure 7-style simulation:\n")
