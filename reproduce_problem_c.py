@@ -179,8 +179,15 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
     for _ in range(4):
         assignment = [-1] * n
         used = set()
+        row_regrets: list[tuple[int, float]] = []
         for i in range(n):
-            choices = sorted(range(n), key=lambda j: cost[i][j] + prices[j])
+            reduced = sorted(cost[i][j] - prices[j] for j in range(n))
+            gap = (reduced[1] - reduced[0]) if n > 1 else reduced[0]
+            row_regrets.append((i, gap))
+        row_order = [i for i, _ in sorted(row_regrets, key=lambda x: x[1], reverse=True)]
+
+        for i in row_order:
+            choices = sorted(range(n), key=lambda j: cost[i][j] - prices[j])
             for j in choices:
                 if j not in used:
                     assignment[i] = j
@@ -192,8 +199,9 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
         for j in range(n):
             i = inv[j]
             if i >= 0:
-                prices[j] = 0.85 * prices[j] + 0.15 * cost[i][j]
-    assignment = mur_local_improve(cost, assignment, rounds=7, stop_early=False)
+                row_min = min(cost[i])
+                prices[j] = 0.85 * prices[j] + 0.15 * (cost[i][j] - row_min)
+    assignment = mur_local_improve(cost, assignment, rounds=14, stop_early=True)
     return assignment
 
 
@@ -205,14 +213,19 @@ def solve_murid(cost: list[list[float]]) -> list[int]:
         for j, val in enumerate(row):
             col_sums[j] += val
     col_bias = [s / n for s in col_sums]
-    order = sorted(range(n), key=lambda i: min(cost[i][j] - 0.2 * col_bias[j] for j in range(n)))
+    row_regrets: list[tuple[int, float]] = []
+    for i in range(n):
+        reduced = sorted(cost[i][j] - 0.2 * col_bias[j] for j in range(n))
+        gap = (reduced[1] - reduced[0]) if n > 1 else reduced[0]
+        row_regrets.append((i, gap))
+    order = [i for i, _ in sorted(row_regrets, key=lambda x: x[1], reverse=True)]
     remaining = set(range(n))
     assign = [-1] * n
     for i in order:
         j_best = min(remaining, key=lambda j: cost[i][j] - 0.2 * col_bias[j])
         assign[i] = j_best
         remaining.remove(j_best)
-    assign = mur_local_improve(cost, assign, rounds=1, stop_early=True)
+    assign = mur_local_improve(cost, assign, rounds=6, stop_early=True)
     return assign
 
 
