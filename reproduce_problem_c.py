@@ -66,7 +66,7 @@ def surveillance_positions(t: int) -> list[tuple[float, float, float]]:
     radius = 14.0
     omega = 2.0 * math.pi / 240.0
     out = []
-    for (cx, cy), ph in zip(base, phases, strict=True):
+    for (cx, cy), ph in zip(base, phases):
         x = cx + radius * math.cos(omega * t + ph)
         y = cy + radius * math.sin(omega * t + ph)
         out.append((x, y, 55.0))
@@ -419,7 +419,7 @@ def plot_runtime(output_path: Path, runtime: dict[str, float]) -> None:
     plt.ylabel("Mean solve time per assignment (ms)")
     plt.title("Runtime comparison on Problem C cost snapshots")
     plt.grid(axis="y", alpha=0.25)
-    for b, v in zip(bars, values, strict=True):
+    for b, v in zip(bars, values):
         plt.text(b.get_x() + b.get_width() / 2.0, v, f"{v:.3f}", ha="center", va="bottom", fontsize=9)
     plt.tight_layout()
     plt.savefig(output_path, dpi=170)

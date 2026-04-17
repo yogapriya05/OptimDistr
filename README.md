@@ -4,6 +4,8 @@ This repository includes a Python reproduction script for the persistent surveil
 
 ## Setup
 
+Use Python 3.9+.
+
 ```bash
 cd OptimDistr
 python -m pip install -r requirements.txt
