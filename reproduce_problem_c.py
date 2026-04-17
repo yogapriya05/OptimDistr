@@ -127,11 +127,12 @@ def greedy_seed_assignment(cost: list[list[float]]) -> list[int]:
     n = len(cost)
     remaining = set(range(n))
     assign = [-1] * n
-    order = sorted(
-        range(n),
-        key=lambda i: sorted(cost[i])[1] - sorted(cost[i])[0] if n > 1 else cost[i][0],
-        reverse=True,
-    )
+    row_gaps = []
+    for i in range(n):
+        sorted_row = sorted(cost[i])
+        gap = (sorted_row[1] - sorted_row[0]) if n > 1 else sorted_row[0]
+        row_gaps.append((i, gap))
+    order = [i for i, _ in sorted(row_gaps, key=lambda x: x[1], reverse=True)]
     for i in order:
         j_best = min(remaining, key=lambda j: cost[i][j])
         assign[i] = j_best
@@ -197,7 +198,11 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
 def solve_murid(cost: list[list[float]]) -> list[int]:
     """Inexact dual-style assignment: one-shot reduced-cost matching with light repair."""
     n = len(cost)
-    col_bias = [statistics.fmean(cost[i][j] for i in range(n)) for j in range(n)]
+    col_sums = [0.0] * n
+    for row in cost:
+        for j, val in enumerate(row):
+            col_sums[j] += val
+    col_bias = [s / n for s in col_sums]
     order = sorted(range(n), key=lambda i: min(cost[i][j] - 0.2 * col_bias[j] for j in range(n)))
     remaining = set(range(n))
     assign = [-1] * n
@@ -329,7 +334,7 @@ def benchmark_solvers(
     }
 
     sample_count = min(cfg.benchmark_samples, len(cost_matrices))
-    sampled = [cost_matrices[i] for i in range(0, len(cost_matrices), max(1, len(cost_matrices) // sample_count))][:sample_count]
+    sampled = evenly_sample_matrices(cost_matrices, sample_count)
 
     runtime = {}
     avg_cost = {}
@@ -351,6 +356,15 @@ def benchmark_solvers(
         avg_cost[name] = total_cost / max(1, runs)
 
     return runtime, avg_cost
+
+
+def evenly_sample_matrices(cost_matrices: list[list[list[float]]], sample_count: int) -> list[list[list[float]]]:
+    if sample_count <= 0:
+        return []
+    if sample_count >= len(cost_matrices):
+        return cost_matrices[:]
+    step = max(1, len(cost_matrices) // sample_count)
+    return [cost_matrices[i] for i in range(0, len(cost_matrices), step)][:sample_count]
 
 
 def plot_figure6(
