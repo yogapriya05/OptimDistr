@@ -434,6 +434,17 @@ def runtime_order_satisfied(runtime: dict[str, float], rel_tol: float) -> bool:
     return all(greater_than_with_tolerance(runtime[a], runtime[b]) for a, b in zip(expected, expected[1:]))
 
 
+def compute_hungarian_objective(cost_mats: list[list[list[float]]]) -> list[float]:
+    hungarian_obj = []
+    for c in cost_mats:
+        validate_cost_matrix(c, len(c))
+        a = solve_hungarian_dp(c)
+        if not is_valid_assignment(a, len(c)):
+            raise RuntimeError("Hungarian fallback produced invalid assignment")
+        hungarian_obj.append(assignment_cost(c, a))
+    return hungarian_obj
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--episodes", type=int, default=2000)
@@ -449,25 +460,31 @@ def main() -> None:
 
     # Primary simulation using MURID for persistent surveillance behavior.
     murid_obj, battery_traces, cost_mats, _ = run_simulation(solve_murid, cfg)
+    mur_obj, mur_battery_traces, mur_cost_mats, _ = run_simulation(solve_mur, cfg)
+    murd_obj, murd_battery_traces, murd_cost_mats, _ = run_simulation(solve_murd, cfg)
 
     # Exact optimal objective on the same state sequence (overlay-style comparison).
-    hungarian_obj = []
-    for c in cost_mats:
-        validate_cost_matrix(c, len(c))
-        a = solve_hungarian_dp(c)
-        if not is_valid_assignment(a, len(c)):
-            raise RuntimeError("Hungarian fallback produced invalid assignment")
-        hungarian_obj.append(assignment_cost(c, a))
+    hungarian_obj = compute_hungarian_objective(cost_mats)
+    mur_hungarian_obj = compute_hungarian_objective(mur_cost_mats)
+    murd_hungarian_obj = compute_hungarian_objective(murd_cost_mats)
 
     runtime, avg_cost = benchmark_solvers(cost_mats, cfg)
 
     fig6_path = out_dir / "fig6_reproduced.png"
     fig7_path = out_dir / "fig7_reproduced.png"
+    fig6_mur_tap_path = out_dir / "fig6_mur_tap.png"
+    fig7_mur_tap_path = out_dir / "fig7_mur_tap.png"
+    fig6_murd_tap_path = out_dir / "fig6_murd_tap.png"
+    fig7_murd_tap_path = out_dir / "fig7_murd_tap.png"
     rt_path = out_dir / "runtime_comparison.png"
     txt_path = out_dir / "summary.txt"
 
     plot_figure6(fig6_path, murid_obj, hungarian_obj)
     mean_battery, min_battery = plot_figure7(fig7_path, battery_traces)
+    plot_figure6(fig6_mur_tap_path, mur_obj, mur_hungarian_obj)
+    mur_mean_battery, mur_min_battery = plot_figure7(fig7_mur_tap_path, mur_battery_traces)
+    plot_figure6(fig6_murd_tap_path, murd_obj, murd_hungarian_obj)
+    murd_mean_battery, murd_min_battery = plot_figure7(fig7_murd_tap_path, murd_battery_traces)
     plot_runtime(rt_path, runtime)
 
     order_ok = runtime_order_satisfied(runtime, cfg.runtime_order_tolerance)
@@ -493,16 +510,30 @@ def main() -> None:
             f"{mean_battery:.3f}\n"
         )
         f.write(f"  Minimum battery (target around {TARGET_MIN_BATTERY:.0f}): {min_battery:.3f}\n")
+        f.write("MUR-TAP battery statistics:\n")
+        f.write(f"  Mean battery: {mur_mean_battery:.3f}\n")
+        f.write(f"  Minimum battery: {mur_min_battery:.3f}\n")
+        f.write("MURD-TAP battery statistics:\n")
+        f.write(f"  Mean battery: {murd_mean_battery:.3f}\n")
+        f.write(f"  Minimum battery: {murd_min_battery:.3f}\n")
         f.write(
             "\nOutputs:\n"
             f"  - {fig6_path}\n"
             f"  - {fig7_path}\n"
+            f"  - {fig6_mur_tap_path}\n"
+            f"  - {fig7_mur_tap_path}\n"
+            f"  - {fig6_murd_tap_path}\n"
+            f"  - {fig7_murd_tap_path}\n"
             f"  - {rt_path}\n"
             f"  - {txt_path}\n"
         )
 
     print(f"Saved: {fig6_path}")
     print(f"Saved: {fig7_path}")
+    print(f"Saved: {fig6_mur_tap_path}")
+    print(f"Saved: {fig7_mur_tap_path}")
+    print(f"Saved: {fig6_murd_tap_path}")
+    print(f"Saved: {fig7_murd_tap_path}")
     print(f"Saved: {rt_path}")
     print(f"Saved: {txt_path}")
     print(f"Runtime ordering satisfied (tolerance {cfg.runtime_order_tolerance:.3f}): {order_ok}")
