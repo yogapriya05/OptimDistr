@@ -30,6 +30,8 @@ BIG_M = 1e6
 NUM_ROBOTS = 12
 NUM_CHARGING_STATIONS = 8
 NUM_SURVEILLANCE_STATIONS = 4
+TARGET_MEAN_BATTERY_RANGE = (65.0, 70.0)
+TARGET_MIN_BATTERY = 25.0
 
 
 @dataclass
@@ -428,7 +430,8 @@ def runtime_order_satisfied(runtime: dict[str, float], rel_tol: float) -> bool:
     def gt(a: float, b: float) -> bool:
         return a > b * (1.0 + rel_tol)
 
-    return gt(runtime["Hungarian"], runtime["MUR"]) and gt(runtime["MUR"], runtime["MURD"]) and gt(runtime["MURD"], runtime["MURID"])
+    expected = ["Hungarian", "MUR", "MURD", "MURID"]
+    return all(gt(runtime[a], runtime[b]) for a, b in zip(expected, expected[1:]))
 
 
 def main() -> None:
@@ -485,8 +488,11 @@ def main() -> None:
         for k in ["Hungarian", "MUR", "MURD", "MURID"]:
             f.write(f"  {k:10s}: {avg_cost[k]:.4f}\n")
         f.write("\nBattery statistics from Figure 7-style simulation:\n")
-        f.write(f"  Mean battery (target ~65-70): {mean_battery:.3f}\n")
-        f.write(f"  Minimum battery (target around 25): {min_battery:.3f}\n")
+        f.write(
+            f"  Mean battery (target ~{TARGET_MEAN_BATTERY_RANGE[0]:.0f}-{TARGET_MEAN_BATTERY_RANGE[1]:.0f}): "
+            f"{mean_battery:.3f}\n"
+        )
+        f.write(f"  Minimum battery (target around {TARGET_MIN_BATTERY:.0f}): {min_battery:.3f}\n")
         f.write(
             "\nOutputs:\n"
             f"  - {fig6_path}\n"
