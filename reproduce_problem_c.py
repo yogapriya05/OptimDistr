@@ -482,9 +482,9 @@ def main() -> None:
     plot_figure6(fig6_path, murid_obj, hungarian_obj)
     mean_battery, min_battery = plot_figure7(fig7_path, battery_traces)
     plot_figure6(fig6_mur_tap_path, mur_obj, mur_hungarian_obj)
-    plot_figure7(fig7_mur_tap_path, mur_battery_traces)
+    _, _ = plot_figure7(fig7_mur_tap_path, mur_battery_traces)
     plot_figure6(fig6_murd_tap_path, murd_obj, murd_hungarian_obj)
-    plot_figure7(fig7_murd_tap_path, murd_battery_traces)
+    _, _ = plot_figure7(fig7_murd_tap_path, murd_battery_traces)
     plot_runtime(rt_path, runtime)
 
     order_ok = runtime_order_satisfied(runtime, cfg.runtime_order_tolerance)
