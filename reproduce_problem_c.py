@@ -27,6 +27,9 @@ import matplotlib.pyplot as plt
 
 
 BIG_M = 1e6
+NUM_ROBOTS = 12
+NUM_CHARGING_STATIONS = 8
+NUM_SURVEILLANCE_STATIONS = 4
 
 
 @dataclass
@@ -39,6 +42,7 @@ class Config:
     practical_min_battery: int = 25
     benchmark_samples: int = 120
     benchmark_repeats: int = 8
+    runtime_order_tolerance: float = 0.03
 
 
 def charging_station_positions() -> list[tuple[float, float, float]]:
@@ -220,8 +224,8 @@ def build_cost_matrix(
     for i in range(n):
         current_station = robot_to_station[i]
         for j in range(n):
-            target_is_charging = j < 8
-            current_is_charging = current_station < 8
+            target_is_charging = j < NUM_CHARGING_STATIONS
+            current_is_charging = current_station < NUM_CHARGING_STATIONS
             travel = l2_distance(robot_positions[i], stations[j])
 
             if target_is_charging:
@@ -267,12 +271,14 @@ def run_simulation(
 ) -> tuple[list[float], list[list[int]], list[list[list[float]]], list[list[int]]]:
     random.seed(cfg.seed)
 
-    n = 12
+    n = NUM_ROBOTS
     stations0 = charging_station_positions() + surveillance_positions(0)
     robot_positions = stations0[:]
 
     # Practical initialization: surveillance robots start with high battery.
-    batteries = [random.randint(58, 86) for _ in range(8)] + [random.randint(76, 92) for _ in range(4)]
+    batteries = [random.randint(58, 86) for _ in range(NUM_CHARGING_STATIONS)] + [
+        random.randint(76, 92) for _ in range(NUM_SURVEILLANCE_STATIONS)
+    ]
 
     # One robot per station at start: robots 0..11 at stations 0..11.
     robot_to_station = list(range(n))
@@ -302,7 +308,7 @@ def run_simulation(
         for i in range(n):
             station = robot_to_station[i]
             robot_positions[i] = stations_t[station]
-            if station < 8:
+            if station < NUM_CHARGING_STATIONS:
                 batteries[i] = min(cfg.battery_max, batteries[i] + cfg.battery_charge_rate)
             else:
                 batteries[i] = max(0, batteries[i] - cfg.battery_discharge_rate)
@@ -404,15 +410,23 @@ def plot_runtime(output_path: Path, runtime: dict[str, float]) -> None:
     plt.close()
 
 
+def runtime_order_satisfied(runtime: dict[str, float], rel_tol: float) -> bool:
+    def gt(a: float, b: float) -> bool:
+        return a > b * (1.0 + rel_tol)
+
+    return gt(runtime["Hungarian"], runtime["MUR"]) and gt(runtime["MUR"], runtime["MURD"]) and gt(runtime["MURD"], runtime["MURID"])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--episodes", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
     parser.add_argument("--strict-runtime-order", action="store_true")
+    parser.add_argument("--runtime-order-tolerance", type=float, default=0.03)
     args = parser.parse_args()
 
-    cfg = Config(episodes=args.episodes, seed=args.seed)
+    cfg = Config(episodes=args.episodes, seed=args.seed, runtime_order_tolerance=args.runtime_order_tolerance)
     out_dir = args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -439,7 +453,7 @@ def main() -> None:
     mean_battery, min_battery = plot_figure7(fig7_path, battery_traces)
     plot_runtime(rt_path, runtime)
 
-    order_ok = runtime["Hungarian"] > runtime["MUR"] > runtime["MURD"] > runtime["MURID"]
+    order_ok = runtime_order_satisfied(runtime, cfg.runtime_order_tolerance)
 
     with txt_path.open("w", encoding="utf-8") as f:
         f.write("Problem C Reproduction Summary\n")
@@ -449,7 +463,10 @@ def main() -> None:
         f.write("Runtime (sec/assignment):\n")
         for k in ["Hungarian", "MUR", "MURD", "MURID"]:
             f.write(f"  {k:10s}: {runtime[k]:.8f}\n")
-        f.write(f"\nRuntime ordering Hungarian > MUR > MURD > MURID: {order_ok}\n\n")
+        f.write(
+            "\nRuntime ordering Hungarian > MUR > MURD > MURID "
+            f"(empirical, tolerance={cfg.runtime_order_tolerance:.3f}): {order_ok}\n\n"
+        )
         f.write("Average objective on sampled Problem C matrices:\n")
         for k in ["Hungarian", "MUR", "MURD", "MURID"]:
             f.write(f"  {k:10s}: {avg_cost[k]:.4f}\n")
@@ -468,7 +485,7 @@ def main() -> None:
     print(f"Saved: {fig7_path}")
     print(f"Saved: {rt_path}")
     print(f"Saved: {txt_path}")
-    print(f"Runtime ordering satisfied: {order_ok}")
+    print(f"Runtime ordering satisfied (tolerance {cfg.runtime_order_tolerance:.3f}): {order_ok}")
     print(f"Mean battery: {mean_battery:.3f}; minimum battery: {min_battery:.3f}")
     if args.strict_runtime_order and not order_ok:
         raise RuntimeError("Runtime ordering check failed")

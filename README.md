@@ -21,6 +21,12 @@ Strict runtime-order enforcement (fails fast if violated):
 python reproduce_problem_c.py --episodes 2000 --seed 7 --strict-runtime-order
 ```
 
+Optional tolerance for empirical runtime ordering check:
+
+```bash
+python reproduce_problem_c.py --episodes 2000 --seed 7 --strict-runtime-order --runtime-order-tolerance 0.03
+```
+
 Outputs are created in:
 
 - `outputs/fig6_reproduced.png`
