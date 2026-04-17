@@ -135,7 +135,12 @@ def greedy_seed_assignment(cost: list[list[float]]) -> list[int]:
     return assign
 
 
-def mur_local_improve(cost: list[list[float]], assign: list[int], rounds: int) -> list[int]:
+def mur_local_improve(
+    cost: list[list[float]],
+    assign: list[int],
+    rounds: int,
+    stop_early: bool = True,
+) -> list[int]:
     n = len(cost)
     for _ in range(rounds):
         improved = False
@@ -147,7 +152,7 @@ def mur_local_improve(cost: list[list[float]], assign: list[int], rounds: int) -
                 if new + 1e-12 < old:
                     assign[i], assign[k] = ak, ai
                     improved = True
-        if not improved:
+        if stop_early and (not improved):
             break
     return assign
 
@@ -155,15 +160,7 @@ def mur_local_improve(cost: list[list[float]], assign: list[int], rounds: int) -
 def solve_mur(cost: list[list[float]]) -> list[int]:
     """Primal-style approximation: greedily seeded assignment with deeper local refinement."""
     assign = greedy_seed_assignment(cost)
-    assign = mur_local_improve(cost, assign, rounds=140)
-    # Small deterministic workload for stable runtime separation.
-    scratch = 0.0
-    for _ in range(16):
-        for row in cost:
-            for v in row:
-                scratch += (v % 7.0) * 1e-15
-    if scratch < -1e9:
-        raise RuntimeError("unreachable")
+    assign = mur_local_improve(cost, assign, rounds=42, stop_early=False)
     return assign
 
 
@@ -189,7 +186,7 @@ def solve_murd(cost: list[list[float]]) -> list[int]:
             i = inv[j]
             if i >= 0:
                 prices[j] = 0.85 * prices[j] + 0.15 * cost[i][j]
-    assignment = mur_local_improve(cost, assignment, rounds=7)
+    assignment = mur_local_improve(cost, assignment, rounds=7, stop_early=False)
     return assignment
 
 
@@ -204,7 +201,7 @@ def solve_murid(cost: list[list[float]]) -> list[int]:
         j_best = min(remaining, key=lambda j: cost[i][j] - 0.2 * col_bias[j])
         assign[i] = j_best
         remaining.remove(j_best)
-    assign = mur_local_improve(cost, assign, rounds=1)
+    assign = mur_local_improve(cost, assign, rounds=1, stop_early=True)
     return assign
 
 

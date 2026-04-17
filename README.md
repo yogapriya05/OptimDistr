@@ -5,28 +5,28 @@ This repository includes a Python reproduction script for the persistent surveil
 ## Setup
 
 ```bash
-cd /home/runner/work/OptimDistr/OptimDistr
+cd OptimDistr
 python -m pip install -r requirements.txt
 ```
 
 ## Run
 
 ```bash
-python /home/runner/work/OptimDistr/OptimDistr/reproduce_problem_c.py --episodes 2000 --seed 7
+python reproduce_problem_c.py --episodes 2000 --seed 7
 ```
 
 Strict runtime-order enforcement (fails fast if violated):
 
 ```bash
-python /home/runner/work/OptimDistr/OptimDistr/reproduce_problem_c.py --episodes 2000 --seed 7 --strict-runtime-order
+python reproduce_problem_c.py --episodes 2000 --seed 7 --strict-runtime-order
 ```
 
 Outputs are created in:
 
-- `/home/runner/work/OptimDistr/OptimDistr/outputs/fig6_reproduced.png`
-- `/home/runner/work/OptimDistr/OptimDistr/outputs/fig7_reproduced.png`
-- `/home/runner/work/OptimDistr/OptimDistr/outputs/runtime_comparison.png`
-- `/home/runner/work/OptimDistr/OptimDistr/outputs/summary.txt`
+- `outputs/fig6_reproduced.png`
+- `outputs/fig7_reproduced.png`
+- `outputs/runtime_comparison.png`
+- `outputs/summary.txt`
 
 The summary file includes runtime comparison of Hungarian, MUR, MURD, and MURID and checks whether runtime ordering is `Hungarian > MUR > MURD > MURID`.
 
